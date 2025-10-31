@@ -54,5 +54,6 @@ if file is not None:
         tooltip={"html": "RSRP: {RSRP (dBm)} dBm<br/>Lat: {lat}<br/>Lon: {lon}"},
     )
 
+    st.caption("RSRP color scale: red = weak signal (≈-135 dBm), green = strong signal (≈-85 dBm).")
     st.pydeck_chart(deck)
 

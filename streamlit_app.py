@@ -18,13 +18,6 @@ def find_col(df: pl.DataFrame, candidates: list[str]) -> str | None:
             return cols_lower[name.lower()]
     return None
 
-def coerce_numeric(df: pl.DataFrame, col: str, as_float: bool = True) -> pl.Series:
-    try:
-        if as_float:
-            return df[col].cast(pl.Float64, strict=False)
-        return df[col].cast(pl.Int64, strict=False)
-    except Exception:
-        return pl.col(col).str.replace_all(",", ".").cast(pl.Float64, strict=False)
 
 def validate_and_prepare(df: pl.DataFrame) -> pl.DataFrame:
     lat_col = find_col(df, REQUIRED_COLS["lat"])
@@ -40,10 +33,8 @@ def validate_and_prepare(df: pl.DataFrame) -> pl.DataFrame:
 
     df = df.rename({lat_col: "lat", lon_col: "lon", rsrp_col: "RSRP (dBm)"})
 
-    # --- drop nulls / invalid numeric values ---
     df = df.drop_nulls(["lat", "lon", "RSRP (dBm)"])
 
-    # --- plausible ranges ---
     df = df.filter(
         (pl.col("lat").is_between(-90, 90)) &
         (pl.col("lon").is_between(-180, 180))
@@ -75,7 +66,7 @@ def compute_view(df_pd) -> pdk.ViewState:
     lon_span = float(df_pd["lon"].max() - df_pd["lon"].min())
     span = max(lat_span, lon_span)
 
-    # Rough mapping span→zoom (very rough, but avoids zoom=3 on dense local data)
+    # Rough mapping span→zoom
     if span < 0.01:
         zoom = 15
     elif span < 0.1:
@@ -92,13 +83,11 @@ def compute_view(df_pd) -> pdk.ViewState:
 def main():
     st.title("Coverage Map Visualization")
 
-    # Accept standard Parquet extensions ('.parquet'); users sometimes upload without extension via Streamlit
     file = st.file_uploader("Upload your cellular coverage data (Parquet format)", type=["pl"])
     if file is None:
         st.info("Upload a Parquet file containing Latitude, Longitude, and RSRP (dBm) columns.")
         return
 
-    # --- Read parquet safely ---
     try:
         df = pl.read_parquet(file)
         if df.is_empty():
@@ -108,7 +97,6 @@ def main():
         st.error(f"Error reading Parquet file: {e}")
         st.stop()
 
-    # --- Validate / prepare ---
     try:
         df = validate_and_prepare(df)
     except ValueError as ve:
@@ -118,9 +106,8 @@ def main():
         st.error(f"Unexpected error while preparing data: {e}")
         st.stop()
 
-    # --- Build layer & deck ---
     try:
-        df_pd = df.to_pandas()  # pydeck consumes pandas
+        df_pd = df.to_pandas()
     except Exception as e:
         st.error(f"Failed to convert to pandas for visualization: {e}")
         st.stop()
@@ -130,7 +117,7 @@ def main():
             "ScatterplotLayer",
             data=df_pd,
             get_position="[lon, lat]",
-            get_fill_color="[r, g, b, 180]",  # RGBA
+            get_fill_color="[r, g, b, 180]",
             get_radius=30,
             pickable=True,
             auto_highlight=True,
